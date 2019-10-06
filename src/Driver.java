@@ -2,10 +2,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.io.FileNotFoundException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,6 +12,7 @@ import com.datastax.driver.core.Cluster;
 import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.QueryOptions;
 import com.datastax.driver.core.Session;
+import com.google.common.math.Quantiles;
 
 public class Driver implements Callable<Pair<Long, Double>> {
 	private int index;
@@ -41,19 +39,20 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		PrintStream ps = new PrintStream(fos);
 		//System.setOut(ps);
 		((ThreadPrintStream)System.out).setThreadOut(ps);
-		long startTime = System.currentTimeMillis();
 		startSession();
-		long numOfTransactions = readXactFile();
+
+		Pair<Long, Long> transactionOp = readXactFile();
+		Long numOfTransactions = transactionOp.getKey();
+		Long execTimeMs = transactionOp.getValue();
 		closeSession();
-		long endTime = System.currentTimeMillis();
 		System.out.println("Number of transactions in thread: "+numOfTransactions);
-		System.out.println("Time taken in ms: "+(endTime-startTime));
-		Double execTime = (double) (endTime - startTime) / 1000.0;
-		System.out.println("Time taken in secs: "+execTime);
+		System.out.println("Time taken in ms: "+execTimeMs);
+		Double execTimeSec = (double) execTimeMs / 1000.0;
+		System.out.println("Time taken in secs: "+execTimeSec);
 		// Close System.out for this thread which will
 		// flush and close this thread's text file.
 		System.out.close();
-		return new Pair<>(numOfTransactions, execTime);
+		return new Pair<>(numOfTransactions, execTimeSec);
 		//return numOfTransactions;
 	}
 
@@ -95,7 +94,7 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		sc.close();
 		ThreadPrintStream.replaceSystemOut();
 		for(int i=1; i<=clientCount; i++){
-			System.out.println("index is "+i+" ip is"+serverIPs.get(i%5)+ " clientCount is "+clientCount);
+			System.out.println("index is "+i+" ip is "+serverIPs.get(i%5));
 			Callable<Pair<Long, Double>> callable = new Driver(i, readConsistency, writeConsistency, serverIPs.get(i%5));
 			callableList.add(callable);
 			//Future<Long> future = executorService.submit(callable);
@@ -117,24 +116,28 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		executorService.shutdown();
 	}
 
-	public long readXactFile() {
+	public Pair<Long, Long> readXactFile() {
 		//String xactFilepath = xactDir + "/" + xactFileId + ".txt";
 		try {
 			Scanner sc = new Scanner(new File(xactFilepath));
-			long xactCount = readTransactions(sc);
+			Pair<Long, Long> transacOp = readTransactions(sc);
 			sc.close();
-			return xactCount;
+			return transacOp;
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		}
-		return 0;
+		return new Pair<>(0L,0L);
 	}
 	
-	private long readTransactions(Scanner sc) {
+	private Pair<Long, Long> readTransactions(Scanner sc) {
 		long count = 0;
+		List<Long> transactionTimeList = new ArrayList<>();
+		Long totalTime = 0L;
+		long startTime, endTime;
         TransactionFactory factory = new TransactionFactory(session, writeConsistencyLevel);
         while (sc.hasNext()) {
         	count++;
+        	startTime = System.currentTimeMillis();
             String[] args = sc.nextLine().split(",");
             String type = args[0];
             if (type.equals("N")) {
@@ -155,8 +158,18 @@ public class Driver implements Callable<Pair<Long, Double>> {
             }
             Transaction transaction = factory.getTransaction(type);
             transaction.process(args);
+            endTime = System.currentTimeMillis();
+            transactionTimeList.add(endTime-startTime);
+            totalTime += (endTime-startTime);
         }
-        return count;
+        Double averageTime = (double) totalTime / (double) count;
+		Collections.sort(transactionTimeList);
+		//double median;
+		double median = Quantiles.median().compute(transactionTimeList);
+		double percentile95 = Quantiles.percentiles().index(95).compute(transactionTimeList);
+		double percentile99 = Quantiles.percentiles().index(99).compute(transactionTimeList);
+		// Std err - averageTime, median, percentile95 and percentile 99
+		return new Pair<>(count, totalTime);
     }
 	
 	public void startSession() {
