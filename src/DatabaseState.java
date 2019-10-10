@@ -1,12 +1,8 @@
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.List;
-
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.exceptions.ReadTimeoutException;
 
-public class Performance {
-    private static String cqlshPath = "/temp/Cassandra/bin/cqlsh";
+public class DatabaseState {
     private static String serverIP = "192.168.56.159";
     private static String keyspace = "cs5424";
     private static Session session;
