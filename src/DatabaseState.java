@@ -77,7 +77,7 @@ public class DatabaseState {
                         //System.out.println("For w_id"+i+" d_id"+j+" OL_AMT"+OL_AMOUNT+" OL_QTY"+OL_QUANTITY);
                     }
                 System.out.println("Query 5");
-                System.out.println(" sum(OL_AMOUNT) \tsum(OL_QUANTITY)");
+                System.out.println("sum(OL_AMOUNT) \tsum(OL_QUANTITY)");
                 System.out.println(OL_AMOUNT + "\t\t" + OL_QUANTITY);
 
 
@@ -90,9 +90,9 @@ public class DatabaseState {
                     for(int j1=0, j2=3000; j2<=100000; j1+=3000, j2+=3000){
                         String query6;
                         if(j2 != 100000)
-                            query6 = "select sum(S_QUANTITY), sum(S_YTD), sum(S_ORDER_CNT), sum(S_REMOTE_CNT) from Stock where s_w_id = "+i+" and s_i_id >= "+j1+" and s_i_id < "+j2+";";
+                            query6 = "select sum(S_QUANTITY), sum(S_YTD), sum(S_ORDER_CNT), sum(S_REMOTE_CNT) from Stock where s_w_id = "+i+" and s_i_id >= "+j1+" and s_i_id < "+j2+" ALLOW FILTERING;";
                         else
-                            query6 = "select sum(S_QUANTITY), sum(S_YTD), sum(S_ORDER_CNT), sum(S_REMOTE_CNT) from Stock where s_w_id = "+i+" and s_i_id >= "+j1+" and s_i_id <= "+j2+";";
+                            query6 = "select sum(S_QUANTITY), sum(S_YTD), sum(S_ORDER_CNT), sum(S_REMOTE_CNT) from Stock where s_w_id = "+i+" and s_i_id >= "+j1+" and s_i_id <= "+j2+" ALLOW FILTERING;";
 
                         rs = session.execute(query6);
                         row = rs.one();
@@ -104,7 +104,7 @@ public class DatabaseState {
 
                 System.out.println("Query 6");
                 System.out.println("sum(S_QUANTITY) \tsum(S_YTD) \tsum(S_ORDER_CNT) \tsum(S_REMOTE_CNT)");
-                System.out.println(S_QUANTITY + "\t" + S_YTD + "\t\t" + S_ORDER_CNT + "\t\t\t" + S_REMOTE_CNT);
+                System.out.println(S_QUANTITY + "\t\t" + S_YTD + "\t\t" + S_ORDER_CNT + "\t\t\t" + S_REMOTE_CNT);
                 break;
             } catch (ReadTimeoutException e) {
                 e.printStackTrace();

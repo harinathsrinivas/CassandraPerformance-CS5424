@@ -97,17 +97,18 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		new File(errFolder).mkdirs();
 
 		List<String> serverIPs =  new ArrayList<>(Arrays.asList("192.168.56.159","192.168.56.160","192.168.56.161","192.168.56.162","192.168.56.163"));
-		Scanner sc = new Scanner(System.in);
+		//Scanner sc = new Scanner(System.in);
 		System.out.println("Enter the number of Clients (NC) to execute (1<= NC <=40): ");
-		int clientCount = sc.nextInt();
+		//int clientCount = sc.nextInt();
 		//int clientCount = 10;
-		System.out.println("Select one of the following consistency levels...");
+		System.out.println("Running: "+clientCount+" clients with readConsistency: "+readConsistency+" writeConsistency"+writeConsistency);
+		/*System.out.println("Select one of the following consistency levels...");
 		System.out.println("(1) Write - QUORUM, Read - QUORUM");
 		System.out.println("(2) Write - ALL, Read - ONE");
-		System.out.println("Enter your option: ");
-		int consOpt = sc.nextInt();
+		System.out.println("Enter your option: ");*/
+		//int consOpt = sc.nextInt();
 		//int consOpt = 1;
-		if(consOpt == 1){
+		/*if(consOpt == 1){
 			writeConsistency = "QUORUM";
 			readConsistency = "QUORUM";
 		}
@@ -122,7 +123,7 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		else{
 			System.out.println("Invalid option selected exiting..");
 			System.exit(2);
-		}
+		}*/
 		ExecutorService executorService = Executors.newFixedThreadPool(clientCount);
 		//List<Future<Long>> futureList = new ArrayList<>(clientCount);
 		List<Callable<Pair<Long, Double>>> callableList = new ArrayList<>(clientCount);
