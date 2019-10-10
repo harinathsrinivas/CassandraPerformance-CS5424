@@ -21,20 +21,17 @@ public class LoadData {
 	
 	
 	public static void main(String[] args) {
-		if(args.length < 1) {
-			System.out.println("1 command line arguments expected - Ip address of Running node");
-			System.exit(2);
-		}else if(args.length == 1){
+		if(args.length == 1){
 			serverIP = args[0];
 			System.out.println("Running the program in IP: "+serverIP);
 		}
-		else{
-			System.out.println("Wrong number of command line arguments - expected 1 argument - Ip address");
+		else if(args.length > 1){
+			System.out.println("Wrong number of command line arguments - expected 1 argument - Ip address...");
 			System.exit(2);
 		}
 
 		String replicationStrategy = "SimpleStrategy";
-		int replicationFactor = 1;
+		int replicationFactor = 3;
 		
 		startSession();
 		// keyspace
