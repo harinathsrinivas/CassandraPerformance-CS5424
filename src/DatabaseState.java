@@ -9,14 +9,11 @@ public class DatabaseState {
     private static Cluster cluster;
 
     public static void main(String[] args) {
-        if(args.length < 1) {
-            System.out.println("1 command line arguments expected - Ip address of Running node...");
-            System.exit(2);
-        }else if(args.length == 1){
+        if(args.length == 1){
             serverIP = args[0];
             System.out.println("Running the program in IP: "+serverIP);
         }
-        else{
+        else if(args.length > 1){
             System.out.println("Wrong number of command line arguments - expected 1 argument - Ip address...");
             System.exit(2);
         }
@@ -90,8 +87,13 @@ public class DatabaseState {
                 int S_ORDER_CNT = 0;
                 int S_REMOTE_CNT = 0;
                 for(int i=1; i<=10; i++)
-                    for(int j=1; j<=100000; j++){
-                        String query6 = "select sum(S_QUANTITY), sum(S_YTD), sum(S_ORDER_CNT), sum(S_REMOTE_CNT) from Stock where s_w_id = "+i+" and s_i_id = "+j+";";
+                    for(int j1=0, j2=3000; j2<=100000; j1+=3000, j2+=3000){
+                        String query6;
+                        if(j2 != 100000)
+                            query6 = "select sum(S_QUANTITY), sum(S_YTD), sum(S_ORDER_CNT), sum(S_REMOTE_CNT) from Stock where s_w_id = "+i+" and s_i_id >= "+j1+" and s_i_id < "+j2+";";
+                        else
+                            query6 = "select sum(S_QUANTITY), sum(S_YTD), sum(S_ORDER_CNT), sum(S_REMOTE_CNT) from Stock where s_w_id = "+i+" and s_i_id >= "+j1+" and s_i_id <= "+j2+";";
+
                         rs = session.execute(query6);
                         row = rs.one();
                         S_QUANTITY = S_QUANTITY.add(row.getDecimal(0));

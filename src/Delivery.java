@@ -66,19 +66,16 @@ public class Delivery extends Transaction {
 	private BigDecimal getTotalAmount(int w_id, int d_id, int o_id) {
 		Session session = getSession();
 		PreparedStatement ps = session.prepare(
-			"SELECT ol_amount " +
+			"SELECT sum(ol_amount) as sum_ol_amount " +
 		    "FROM orderlines " +
-		    "WHERE ol_w_id = ? AND ol_d_id = ? AND ol_o_id = ? " +
-		    "ALLOW FILTERING;"
+		    "WHERE ol_w_id = ? AND ol_d_id = ? AND ol_o_id = ?;"
 		);
 		ResultSet resultSet = session.execute(ps.bind(w_id, d_id, o_id));
 		List<Row> results = resultSet.all();
-		
-		double amount = 0;
-		for (Row result: results) {
-			amount += result.getDecimal("ol_amount").doubleValue();
+		if (results.isEmpty()) {
+			throw new IllegalArgumentException("No matching customer");
 		}
-		return new BigDecimal(amount);
+		return results.get(0).getDecimal("sum_ol_amount");
 	}
 	
 	private Row getCustomer(int w_id, int d_id, int c_id) {
