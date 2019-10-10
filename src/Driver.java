@@ -13,6 +13,7 @@ import com.datastax.driver.core.ConsistencyLevel;
 import com.datastax.driver.core.QueryOptions;
 import com.datastax.driver.core.Session;
 import com.google.common.math.Quantiles;
+import com.google.common.math.Stats;
 
 public class Driver implements Callable<Pair<Long, Double>> {
 	private int index;
@@ -24,6 +25,12 @@ public class Driver implements Callable<Pair<Long, Double>> {
 	private Cluster cluster;
 	private String xactDir = "/temp/project-files/xact-files/";
 	private String xactFilepath;
+	private static int clientCount;
+	private static String readConsistency="", writeConsistency="";
+	private static String outFolder = "output/transactions/";
+	private static String errFolder = "output/performance/";
+
+
 
 	Driver(int idx, String readConsistency, String writeConsistency, String ip) {
 		this.index = idx;
@@ -32,6 +39,17 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		this.serverIP = ip;
 		this.xactFilepath = xactDir + "/" + index + ".txt";
 	}
+	private void setOut(String filenNameEnd, boolean isOut) throws FileNotFoundException {
+		File file;
+		if(isOut){
+			file = new File(outFolder+index+filenNameEnd);}
+		else{
+			file = new File(errFolder+index+filenNameEnd);}
+
+		FileOutputStream fos = new FileOutputStream(file);
+		PrintStream ps = new PrintStream(fos);
+		((ThreadPrintStream)System.out).setThreadOut(ps);
+	}
 	@Override
 	public Pair<Long, Double> call() throws Exception {
 		File file = new File(index+"_stdout.txt");
@@ -39,16 +57,17 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		PrintStream ps = new PrintStream(fos);
 		//System.setOut(ps);
 		((ThreadPrintStream)System.out).setThreadOut(ps);
+		this.setOut("_stdout.txt", true);
 		startSession();
 
 		Pair<Long, Long> transactionOp = readXactFile();
 		Long numOfTransactions = transactionOp.getKey();
 		Long execTimeMs = transactionOp.getValue();
 		closeSession();
-		System.out.println("Number of transactions in thread: "+numOfTransactions);
-		System.out.println("Time taken in ms: "+execTimeMs);
+		//System.out.println("Number of transactions in thread: "+numOfTransactions);
+		//System.out.println("Time taken in ms: "+execTimeMs);
 		Double execTimeSec = (double) execTimeMs / 1000.0;
-		System.out.println("Time taken in secs: "+execTimeSec);
+		//System.out.println("Time taken in secs: "+execTimeSec);
 		// Close System.out for this thread which will
 		// flush and close this thread's text file.
 		System.out.close();
@@ -56,22 +75,38 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		//return numOfTransactions;
 	}
 
+
 	public static void main(String[] args) throws InterruptedException {
 
+		if(args.length < 3) {
+			System.out.println("3 command line arguments expected - NumberOfClients, ReadConsistency, WriteConsistency...");
+			System.exit(2);
+		}else if(args.length == 3){
+			clientCount = Integer.parseInt(args[0]);
+			readConsistency = args[1];
+			writeConsistency = args[2];
+		}
+		else{
+			System.out.println("Wrong number of command line arguments - expected 3 argument - NumberOfClients, ReadConsistency, WriteConsistency...");
+			System.exit(2);
+		}
 		/*Driver driver = new Driver(1, "ONE", "ONE", "192.168.56.159");
 		driver.startSession("ONE", "ONE");
 		long numOfTransactions = driver.readXactFile(1, xactDir);// executes 'project-files/xact-files/1.txt'*/
+		new File(outFolder).mkdirs();
+		new File(errFolder).mkdirs();
 
 		List<String> serverIPs =  new ArrayList<>(Arrays.asList("192.168.56.159","192.168.56.160","192.168.56.161","192.168.56.162","192.168.56.163"));
 		Scanner sc = new Scanner(System.in);
 		System.out.println("Enter the number of Clients (NC) to execute (1<= NC <=40): ");
 		int clientCount = sc.nextInt();
-		String readConsistency="", writeConsistency="";
+		//int clientCount = 10;
 		System.out.println("Select one of the following consistency levels...");
 		System.out.println("(1) Write - QUORUM, Read - QUORUM");
 		System.out.println("(2) Write - ALL, Read - ONE");
 		System.out.println("Enter your option: ");
 		int consOpt = sc.nextInt();
+		//int consOpt = 1;
 		if(consOpt == 1){
 			writeConsistency = "QUORUM";
 			readConsistency = "QUORUM";
@@ -88,10 +123,10 @@ public class Driver implements Callable<Pair<Long, Double>> {
 			System.out.println("Invalid option selected exiting..");
 			System.exit(2);
 		}
-		ExecutorService executorService = Executors.newFixedThreadPool(5);
+		ExecutorService executorService = Executors.newFixedThreadPool(clientCount);
 		//List<Future<Long>> futureList = new ArrayList<>(clientCount);
 		List<Callable<Pair<Long, Double>>> callableList = new ArrayList<>(clientCount);
-		sc.close();
+		//sc.close();
 		ThreadPrintStream.replaceSystemOut();
 		for(int i=1; i<=clientCount; i++){
 			System.out.println("index is "+i+" ip is "+serverIPs.get(i%5));
@@ -129,7 +164,7 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		return new Pair<>(0L,0L);
 	}
 	
-	private Pair<Long, Long> readTransactions(Scanner sc) {
+	private Pair<Long, Long> readTransactions(Scanner sc) throws FileNotFoundException {
 		long count = 0;
 		List<Long> transactionTimeList = new ArrayList<>();
 		Long totalTime = 0L;
@@ -165,9 +200,20 @@ public class Driver implements Callable<Pair<Long, Double>> {
         Double averageTime = (double) totalTime / (double) count;
 		Collections.sort(transactionTimeList);
 		//double median;
+		double mean = Stats.meanOf(transactionTimeList);
 		double median = Quantiles.median().compute(transactionTimeList);
 		double percentile95 = Quantiles.percentiles().index(95).compute(transactionTimeList);
 		double percentile99 = Quantiles.percentiles().index(99).compute(transactionTimeList);
+		Double execTimeSec = (double) totalTime / 1000.0;
+		System.out.close();
+		this.setOut("_stderr.txt", false);
+		System.out.println("Number of executed transaction is: "+count);
+		System.out.println("Total transaction execution time (in seconds) is: "+execTimeSec);
+		System.out.println("Transaction throughput is: "+(double) count / (double) execTimeSec);
+		System.out.println("Average transaction latency in ms is: "+mean);
+		System.out.println("Median is :"+median);
+		System.out.println("95 Percentile is: "+percentile95);
+		System.out.println("99 Percentile is: "+percentile99);
 		// Std err - averageTime, median, percentile95 and percentile 99
 		return new Pair<>(count, totalTime);
     }
