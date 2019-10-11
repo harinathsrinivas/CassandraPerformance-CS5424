@@ -21,14 +21,14 @@ public class LoadData {
 	
 	
 	public static void main(String[] args) {
-		if(args.length == 1){
-			serverIP = args[0];
-			System.out.println("Running the program in IP: "+serverIP);
-		}
-		else if(args.length > 1){
-			System.out.println("Wrong number of command line arguments - expected 1 argument - Ip address...");
-			System.exit(2);
-		}
+        if(args.length == 1){
+            serverIP = args[0];
+            System.out.println("Running the program in IP: "+serverIP);
+        }
+        else if(args.length > 1){
+            System.out.println("Wrong number of command line arguments - expected 0 or 1 argument - Ip address...");
+            System.exit(2);
+        }
 
 		String replicationStrategy = "SimpleStrategy";
 		int replicationFactor = 3;
@@ -47,6 +47,7 @@ public class LoadData {
 		createCustomerByBalanceView();
 		loadCustomerData(dataPath + "customer.csv");
 		createOrderTable();
+		createOrderByIdView();
 		loadOrderData(dataPath + "order.csv");
 		createItemTable();
 		loadItemData(dataPath + "item.csv");
@@ -109,7 +110,7 @@ public class LoadData {
 	public static void loadWarehouseData(String filepath) {
 		String[] columnNames = {"W_ID", "W_NAME", "W_STREET_1", "W_STREET_2", "W_CITY", 
 				                "W_STATE", "W_ZIP", "W_TAX", "W_YTD"};
-			loadFromCsv("warehouses", columnNames, filepath);
+		loadFromCsv("warehouses", columnNames, filepath);
 	}
 	
 	public static void createDistrictTable() {
@@ -184,18 +185,27 @@ public class LoadData {
 	}
 	
 	public static void createOrderTable() {
-		Create.Options create = SchemaBuilder.createTable("orders")
+		Create create = SchemaBuilder.createTable("orders")
 				                     .addPartitionKey("O_W_ID", DataType.cint())
 				                     .addPartitionKey("O_D_ID", DataType.cint())
-				                     .addClusteringColumn("O_ID", DataType.cint())
+				                     .addPartitionKey("O_ID", DataType.cint())
 				                     .addColumn("O_C_ID", DataType.cint())
 				                     .addColumn("O_CARRIER_ID", DataType.cint())
 				                     .addColumn("O_OL_CNT", DataType.decimal())
 				                     .addColumn("O_ALL_LOCAL", DataType.decimal())
-				                     .addColumn("O_ENTRY_D", DataType.timestamp())
-				                     .withOptions()
-				                     .clusteringOrder("O_ID", SchemaBuilder.Direction.DESC);
+				                     .addColumn("O_ENTRY_D", DataType.timestamp());
 		session.execute(create);
+	}
+	
+	public static void createOrderByIdView() {
+		String query = 
+				"CREATE MATERIALIZED VIEW IF NOT EXISTS ordersbyid AS " +
+				"SELECT o_w_id, o_d_id, o_id, o_c_id, o_carrier_id, o_ol_cnt, o_entry_d " +
+				"FROM orders " +
+				"WHERE o_w_id IS NOT NULL AND o_d_id IS NOT NULL AND o_id IS NOT NULL "
+				+ " AND o_c_id is NOT NULL " +
+				"PRIMARY KEY ((o_w_id, o_d_id), o_id) WITH CLUSTERING ORDER BY (o_id ASC);";
+		session.execute(query);
 	}
 	
 	public static void loadOrderData(String filepath) {

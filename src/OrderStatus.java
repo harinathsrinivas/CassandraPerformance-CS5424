@@ -70,7 +70,7 @@ public class OrderStatus extends Transaction {
 		Session session = getSession();
 		PreparedStatement ps = session.prepare(
 			"SELECT o_id, o_entry_d, o_carrier_id " +
-		    "FROM orders " +
+		    "FROM ordersbyid " +
 		    "WHERE o_w_id = ? AND o_d_id = ? AND o_c_id = ? " +
 		    "ORDER BY o_id DESC " + 
 		    "LIMIT 1 ALLOW FILTERING;"

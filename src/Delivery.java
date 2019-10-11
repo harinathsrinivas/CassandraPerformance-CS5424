@@ -23,25 +23,30 @@ public class Delivery extends Transaction {
 		int o_carrier_id = Integer.parseInt(args[2]);
 		for (int d_id = 1; d_id <= 10; d_id++) {
 			Row order;
-			ResultSet update;
+			ResultSet updateOrder;
 			int o_id;
 			int o_ol_cnt;
 			do {
 				order = getOrder(w_id, d_id);
 				if (order == null) break;
 				o_id = order.getInt("o_id");
-				update = updateOrder(w_id, d_id, o_id, o_carrier_id);
-			} while (!update.wasApplied());
+				updateOrder = updateOrder(w_id, d_id, o_id, o_carrier_id);
+			} while (!updateOrder.wasApplied());
 			if (order == null) continue;  // all orders are delivered
 			o_ol_cnt = order.getDecimal("o_ol_cnt").intValue();
 			o_id = order.getInt("o_id");
 			updateOrderLines(w_id, d_id, o_id, o_ol_cnt);
 			int c_id = order.getInt("o_c_id");
 			BigDecimal totalAmount = getTotalAmount(w_id, d_id, o_id);
-			Row customer = getCustomer(w_id, d_id, c_id);
-			BigDecimal c_balance = customer.getDecimal("c_balance").add(totalAmount);
-			int c_delivery_cnt = customer.getInt("c_delivery_cnt") + 1;
-			updateCustomer(w_id, d_id, c_id, c_balance, c_delivery_cnt);
+			ResultSet customerUpdate;
+			do {
+				Row customer = getCustomer(w_id, d_id, c_id);
+				BigDecimal c_balance = customer.getDecimal("c_balance").add(totalAmount);
+				int c_delivery_cnt = customer.getInt("c_delivery_cnt") + 1;
+				customerUpdate = updateCustomer(w_id, d_id, c_id, c_balance, c_delivery_cnt);
+			} while (!customerUpdate.wasApplied());
+			System.out.printf("(W_ID, D_ID, C_ID, O_ID): (%d, %d, %d, %d)\n", 
+							  w_id, d_id, o_id, c_id);
 		}
 	}
 
@@ -49,9 +54,8 @@ public class Delivery extends Transaction {
 		Session session = getSession();
 		PreparedStatement ps = session.prepare(
 			"SELECT o_id, o_c_id, o_ol_cnt " +
-		    "FROM orders " +
+		    "FROM ordersbyid " +
 		    "WHERE o_w_id = ? AND o_d_id = ? AND o_carrier_id = -1 " +
-		    "ORDER BY o_id ASC " + 
 		    "LIMIT 1 ALLOW FILTERING;"
 		);
 		ResultSet resultSet = session.execute(ps.bind(w_id, d_id));
@@ -72,8 +76,9 @@ public class Delivery extends Transaction {
 		);
 		ResultSet resultSet = session.execute(ps.bind(w_id, d_id, o_id));
 		List<Row> results = resultSet.all();
+		
 		if (results.isEmpty()) {
-			throw new IllegalArgumentException("No matching customer");
+			throw new IllegalArgumentException("No matching orderlines");
 		}
 		return results.get(0).getDecimal("sum_ol_amount");
 	}
@@ -95,14 +100,15 @@ public class Delivery extends Transaction {
 	}
 	
 	private ResultSet updateOrder(int w_id, int d_id, int o_id, int o_carrier_id) {
-		Session session = getSession();
+		Session session = getSession();  //
 		PreparedStatement ps = session.prepare(
 			"UPDATE orders " +
 			"SET o_carrier_id = ? " +
 			"WHERE o_w_id = ? AND o_d_id = ? AND o_id = ? " +
 			"IF o_carrier_id = -1;"
 		).setConsistencyLevel(writeConsistencyLevel);
-		return session.execute(ps.bind(o_carrier_id, w_id, d_id, o_id));
+		ResultSet resultSet = session.execute(ps.bind(o_carrier_id, w_id, d_id, o_id));
+		return resultSet;
 	}
 	
 	private ResultSet updateOrderLines(int w_id, int d_id, int o_id, int o_ol_cnt) {
@@ -116,7 +122,8 @@ public class Delivery extends Transaction {
 			"WHERE ol_w_id = ? AND ol_d_id = ? AND ol_o_id = ? " +
 			"AND ol_number IN (" + olNumbersString + ");"
 		).setConsistencyLevel(writeConsistencyLevel);
-		return session.execute(ps.bind(ol_delivery_d, w_id, d_id, o_id));
+		ResultSet resultSet = session.execute(ps.bind(ol_delivery_d, w_id, d_id, o_id));
+		return resultSet;
 	}
 	
 	private ResultSet updateCustomer(
@@ -126,8 +133,11 @@ public class Delivery extends Transaction {
 			"UPDATE customers " +
 			"SET c_balance = ?, " +
 			    "c_delivery_cnt = ? " +
-			"WHERE c_w_id = ? AND c_d_id = ? AND c_id = ?;"
+			"WHERE c_w_id = ? AND c_d_id = ? AND c_id = ? IF c_delivery_cnt = ?;"
 		).setConsistencyLevel(writeConsistencyLevel);
-		return session.execute(ps.bind(c_balance, c_delivery_cnt, w_id, d_id, c_id));
+		int old_c_delivery_cnt = c_delivery_cnt - 1;
+		ResultSet resultSet = session.execute(
+				ps.bind(c_balance, c_delivery_cnt, w_id, d_id, c_id, old_c_delivery_cnt));
+		return resultSet;
 	}
 }

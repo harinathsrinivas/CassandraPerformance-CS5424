@@ -94,8 +94,8 @@ public class PopularItem extends Transaction {
 		Session session = getSession();
 		PreparedStatement ps = session.prepare(
 			"SELECT o_id, o_c_id, o_entry_d " +
-		    "FROM orders " +
-		    "WHERE o_w_id = ? AND o_d_id = ? AND o_id > ?;"
+		    "FROM ordersbyid " +
+		    "WHERE o_w_id = ? AND o_d_id = ? AND o_id > ? ALLOW FILTERING;"
 		);
 		ResultSet resultSet = session.execute(ps.bind(w_id, d_id, gt_o_id));
 		List<Row> results = resultSet.all();

@@ -59,12 +59,12 @@ public class NewOrder extends Transaction {
 		Row district = getDistrict(w_id, d_id);
 		int o_id = district.getInt("d_next_o_id");
 		BigDecimal o_all_local = new BigDecimal(isAllLocal(w_id, orderLines) ? 1 : 0);
-		boolean isValidOId;
+		ResultSet updateOrder;
 		do {
-			ResultSet resultSet = insertOrder(w_id, d_id, o_id, c_id, o_ol_cnt, o_all_local);
-			isValidOId = resultSet.wasApplied();
+			updateOrder = insertOrder(w_id, d_id, o_id, c_id, o_ol_cnt, o_all_local);
+			updateOrder.all();
 			o_id++;
-		} while (!isValidOId);
+		} while (!updateOrder.wasApplied());
 		o_id = o_id - 1;
 		int d_next_o_id = o_id + 1;
 		updateDNextOId(w_id, d_id, d_next_o_id);
@@ -181,22 +181,24 @@ public class NewOrder extends Transaction {
 			int ol_supply_w_id = orderLine.getWId();
 			int i_id = orderLine.getIId();
 			BigDecimal ol_quantity = orderLine.getQuantity();
-			
-			Row stock = getStock(ol_supply_w_id, i_id, ol_dist_info);
-			BigDecimal s_quantity = stock.getDecimal("s_quantity");
-			BigDecimal s_ytd = stock.getDecimal("s_quantity");
-			int s_order_cnt = stock.getInt("s_order_cnt");
-			int s_remote_cnt = stock.getInt("s_remote_cnt");
-			
-			s_quantity = s_quantity.add(ol_quantity.negate());
-			if (s_quantity.doubleValue() < 10) {
-				s_quantity = s_quantity.add(new BigDecimal(100));
-			}
-			s_ytd = s_ytd.add(ol_quantity);
-			s_order_cnt++;
-			if (w_id != ol_supply_w_id) { s_remote_cnt++; }; 
-			updateStock(ol_supply_w_id, i_id, s_quantity, s_ytd, s_order_cnt, s_remote_cnt);
-			
+			BigDecimal s_quantity;
+			ResultSet stockUpdate;
+			do {
+				Row stock = getStock(ol_supply_w_id, i_id, ol_dist_info);
+				s_quantity = stock.getDecimal("s_quantity");
+				BigDecimal s_ytd = stock.getDecimal("s_quantity");
+				int s_order_cnt = stock.getInt("s_order_cnt");
+				int s_remote_cnt = stock.getInt("s_remote_cnt");
+				
+				s_quantity = s_quantity.add(ol_quantity.negate());
+				if (s_quantity.doubleValue() < 10) {
+					s_quantity = s_quantity.add(new BigDecimal(100));
+				}
+				s_ytd = s_ytd.add(ol_quantity);
+				s_order_cnt++;
+				if (w_id != ol_supply_w_id) { s_remote_cnt++; }; 
+				stockUpdate = updateStock(ol_supply_w_id, i_id, s_quantity, s_ytd, s_order_cnt, s_remote_cnt);
+			} while (!stockUpdate.wasApplied());
 			Row item = getItem(i_id);
 			BigDecimal i_price = item.getDecimal("i_price");
 			String i_name = item.getString("i_name");
@@ -261,11 +263,11 @@ public class NewOrder extends Transaction {
 		PreparedStatement ps = session.prepare(
 				"UPDATE stock " +
 				"SET s_quantity = ?, s_ytd = ?, s_order_cnt = ?, s_remote_cnt = ? " +
-				"WHERE s_w_id = ? AND s_i_id = ?"
+				"WHERE s_w_id = ? AND s_i_id = ? IF s_order_cnt = ?"
 		).setConsistencyLevel(writeConsistencyLevel);
-		
+		int old_s_order_cnt = s_order_cnt - 1;
 		ResultSet resultSet = session.execute(ps.bind(
-				s_quantity, s_ytd, s_order_cnt, s_remote_cnt, w_id, i_id));
+				s_quantity, s_ytd, s_order_cnt, s_remote_cnt, w_id, i_id, old_s_order_cnt));
 		return resultSet;
 	}
 	
@@ -291,7 +293,6 @@ public class NewOrder extends Transaction {
 		ResultSet resultSet = session.execute(
 				ps.bind(w_id, d_id, o_id, c_id, o_carrier_id, o_ol_cnt, o_all_local, o_entry_d));	
 		return resultSet;
-		
 	}
 		
 	private ResultSet updateDNextOId(int w_id, int d_id, int d_next_o_id) {
@@ -299,9 +300,10 @@ public class NewOrder extends Transaction {
 		PreparedStatement ps = session.prepare(
 			"UPDATE districts " +
 			"SET d_next_o_id = ? " +
-			"WHERE d_w_id = ? AND d_id = ?;"
+			"WHERE d_w_id = ? AND d_id = ? IF d_next_o_id < ?;"
 		).setConsistencyLevel(writeConsistencyLevel);
-		ResultSet resultSet = session.execute(ps.bind(d_next_o_id, w_id, d_id));	
+		int old_d_next_o_id = d_next_o_id - 1;
+		ResultSet resultSet = session.execute(ps.bind(d_next_o_id, w_id, d_id, old_d_next_o_id));	
 		return resultSet;
 	}
 }

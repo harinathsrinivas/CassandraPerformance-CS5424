@@ -14,7 +14,7 @@ public class DatabaseState {
             System.out.println("Running the program in IP: "+serverIP);
         }
         else if(args.length > 1){
-            System.out.println("Wrong number of command line arguments - expected 1 argument - Ip address...");
+            System.out.println("Wrong number of command line arguments - expected 0 or 1 argument - Ip address...");
             System.exit(2);
         }
         // Use existing keyspace and create session

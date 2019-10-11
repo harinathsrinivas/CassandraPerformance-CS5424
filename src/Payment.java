@@ -21,26 +21,38 @@ public class Payment extends Transaction {
 		int c_id = Integer.parseInt(args[3]);
 		BigDecimal payment = new BigDecimal(args[4]);
 
-		Row warehouse = getWarehouse(w_id);
-		BigDecimal w_ytd = warehouse.getDecimal("w_ytd").add(payment);
-		updateWarehouse(w_id, w_ytd);
+		Row warehouse;
+		ResultSet update;		
+		do {		
+			warehouse = getWarehouse(w_id);
+			BigDecimal old_w_ytd = warehouse.getDecimal("w_ytd");
+			BigDecimal w_ytd = old_w_ytd.add(payment);
+			update = updateWarehouse(w_id, w_ytd, old_w_ytd);
+		} while (!update.wasApplied());
 		
-		Row district = getDistrict(w_id, d_id);
-		BigDecimal d_ytd = district.getDecimal("d_ytd").add(payment);
-		updateDistrict(w_id, d_id, d_ytd);		
+		Row district;
+		do {				
+			district = getDistrict(w_id, d_id);
+			BigDecimal old_d_ytd = district.getDecimal("d_ytd");
+			BigDecimal d_ytd = old_d_ytd.add(payment);
+			updateDistrict(w_id, d_id, d_ytd, old_d_ytd);		
+		} while (!update.wasApplied());
 		
-		Row customer = getCustomer(w_id, d_id, c_id);
-		BigDecimal c_balance = customer.getDecimal("c_balance").add(payment.negate());
-		float c_ytd_payment = customer.getFloat("c_ytd_payment") + payment.floatValue();
-		int c_payment_cnt = customer.getInt("c_payment_cnt") + 1;
-		updateCustomer(w_id, d_id, c_id, c_balance, c_ytd_payment, c_payment_cnt);
-		
+		Row customer;
+		BigDecimal c_balance;
+		do {
+			customer = getCustomer(w_id, d_id, c_id);
+			c_balance = customer.getDecimal("c_balance").add(payment.negate());
+			float c_ytd_payment = customer.getFloat("c_ytd_payment") + payment.floatValue();
+			int c_payment_cnt = customer.getInt("c_payment_cnt") + 1;
+			updateCustomer(w_id, d_id, c_id, c_balance, c_ytd_payment, c_payment_cnt);
+		} while (!update.wasApplied());
 
 		
 		//output
 		System.out.printf(
 				"C_IDENTIFIER: (%d, %d, %d), C_NAME: (%s, %s, %s), " +
-				"C_ADDRESS: (%s, %s, %s ,%s, %s), C_PHONE: %s, C_SINCE: %tc, " +
+				"C_ADDRESS: (%s, %s, %s, %s, %s), C_PHONE: %s, C_SINCE: %tc, " +
 				"C_CREDIT: %s,  C_CREDIT_LIM: %f, C_DISCOUNT: %f, C_BALANCE: %f\n",
 				w_id, d_id, c_id, 
 				customer.getString("c_first"), 
@@ -126,24 +138,24 @@ public class Payment extends Transaction {
 		return results.get(0);
 	}
 	
-	private ResultSet updateWarehouse(int w_id, BigDecimal w_ytd) {
+	private ResultSet updateWarehouse(int w_id, BigDecimal w_ytd, BigDecimal old_w_ytd) {
 		Session session = getSession();
 		PreparedStatement ps = session.prepare(
 			"UPDATE warehouses " +
 			"SET w_ytd = ?" +
-			"WHERE w_id = ?;"
+			"WHERE w_id = ? IF w_ytd = ?;"
 		).setConsistencyLevel(writeConsistencyLevel);
-		return session.execute(ps.bind(w_ytd, w_id));
+		return session.execute(ps.bind(w_ytd, w_id, old_w_ytd));
 	}
 	
-	private ResultSet updateDistrict(int w_id, int d_id, BigDecimal d_ytd) {
+	private ResultSet updateDistrict(int w_id, int d_id, BigDecimal d_ytd, BigDecimal old_d_ytd) {
 		Session session = getSession();
 		PreparedStatement ps = session.prepare(
 			"UPDATE districts " +
 			"SET d_ytd = ? " +
-			"WHERE d_w_id = ? AND d_id = ?;"
+			"WHERE d_w_id = ? AND d_id = ? IF d_ytd = ?;"
 		).setConsistencyLevel(writeConsistencyLevel);
-		return session.execute(ps.bind(d_ytd, w_id, d_id));
+		return session.execute(ps.bind(d_ytd, w_id, d_id, old_d_ytd));
 	}
 	
 	private ResultSet updateCustomer(
