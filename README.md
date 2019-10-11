@@ -28,6 +28,7 @@ https://docs.datastax.com/en/cassandra/3.0/cassandra/initialize/initializeSingle
 cd /temp/Cassandra
 
 4. Copy the jar files into /temp - LoadData.jar, Driver.jar, DatabaseState.jar, MultiProcessDriver.jar, SingleDriver.jar - these jars are already available in first 2 nodes in cluster
+jar files can be found in project/jars folder as well
 cp -rpf /home/stuproj/cs4224m/*.jar /temp
 
 5. Copy project-files directory given into /temp folder - already done in node 1 and node 2
