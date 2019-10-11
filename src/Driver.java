@@ -15,7 +15,7 @@ import com.datastax.driver.core.Session;
 import com.google.common.math.Quantiles;
 import com.google.common.math.Stats;
 
-public class Driver implements Callable<Pair<Long, Double>> {
+public class Driver implements Callable<Double> {
 	private int index;
 	private String serverIP = "192.168.56.159";
 	private String keyspace = "cs5424";
@@ -51,7 +51,7 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		((ThreadPrintStream)System.out).setThreadOut(ps);
 	}
 	@Override
-	public Pair<Long, Double> call() throws Exception {
+	public Double call() throws Exception {
 		File file = new File(index+"_stdout.txt");
 		FileOutputStream fos = new FileOutputStream(file);
 		PrintStream ps = new PrintStream(fos);
@@ -60,18 +60,11 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		this.setOut("_stdout.txt", true);
 		startSession();
 
-		Pair<Long, Long> transactionOp = readXactFile();
-		Long numOfTransactions = transactionOp.getKey();
-		Long execTimeMs = transactionOp.getValue();
+		Double throughPut = readXactFile();
 		closeSession();
-		//System.out.println("Number of transactions in thread: "+numOfTransactions);
-		//System.out.println("Time taken in ms: "+execTimeMs);
-		Double execTimeSec = (double) execTimeMs / 1000.0;
-		//System.out.println("Time taken in secs: "+execTimeSec);
-		// Close System.out for this thread which will
-		// flush and close this thread's text file.
+
 		System.out.close();
-		return new Pair<>(numOfTransactions, execTimeSec);
+		return throughPut;
 		//return numOfTransactions;
 	}
 
@@ -126,46 +119,55 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		}*/
 		ExecutorService executorService = Executors.newFixedThreadPool(clientCount);
 		//List<Future<Long>> futureList = new ArrayList<>(clientCount);
-		List<Callable<Pair<Long, Double>>> callableList = new ArrayList<>(clientCount);
+		List<Callable<Double>> callableList = new ArrayList<>(clientCount);
 		//sc.close();
 		ThreadPrintStream.replaceSystemOut();
 		for(int i=1; i<=clientCount; i++){
 			System.out.println("index is "+i+" ip is "+serverIPs.get(i%5));
-			Callable<Pair<Long, Double>> callable = new Driver(i, readConsistency, writeConsistency, serverIPs.get(i%5));
+			Callable<Double> callable = new Driver(i, readConsistency, writeConsistency, serverIPs.get(i%5));
 			callableList.add(callable);
 			//Future<Long> future = executorService.submit(callable);
 			//futureList.add(future);
 		}
-		List<Future<Pair<Long, Double>>> futureList = executorService.invokeAll(callableList);
-		for(Future<Pair<Long, Double>> fut : futureList){
+		List<Future<Double>> futureList = executorService.invokeAll(callableList);
+		Double thrPutSum = 0.0;
+		Double min = Double.MAX_VALUE;
+		Double max = Double.MIN_VALUE;
+		for(Future<Double> fut : futureList){
 			try {
 				//print the return value of Future, notice the output delay in console
 				// because Future.get() waits for task to get completed
-				Pair<Long, Double> resultPair = fut.get();
-				System.out.println("Number of transactions is ::"+resultPair.getKey());
-				System.out.println("Exec time in ms ::"+resultPair.getValue());
+				Double throughPut = fut.get();
+				thrPutSum += throughPut;
+				if(throughPut < min)
+					min = throughPut;
+				if(throughPut > max)
+					max = throughPut;
 			} catch (InterruptedException | ExecutionException e) {
 				e.printStackTrace();
 			}
 		}
+		System.out.println("Average throughput of "+clientCount+" clients is"+ (thrPutSum / (double)clientCount));
+		System.out.println("Minimum throughput of "+clientCount+" clients is"+ min);
+		System.out.println("Maximum throughput of "+clientCount+" clients is"+ max);
 		//shut down the executor service now
 		executorService.shutdown();
 	}
 
-	public Pair<Long, Long> readXactFile() {
+	public Double readXactFile() {
 		//String xactFilepath = xactDir + "/" + xactFileId + ".txt";
 		try {
 			Scanner sc = new Scanner(new File(xactFilepath));
-			Pair<Long, Long> transacOp = readTransactions(sc);
+			Double throughput = readTransactions(sc);
 			sc.close();
-			return transacOp;
+			return throughput;
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
 		}
-		return new Pair<>(0L,0L);
+		return 0.0;
 	}
 	
-	private Pair<Long, Long> readTransactions(Scanner sc) throws FileNotFoundException {
+	private Double readTransactions(Scanner sc) throws FileNotFoundException {
 		long count = 0;
 		List<Long> transactionTimeList = new ArrayList<>();
 		Long totalTime = 0L;
@@ -216,7 +218,7 @@ public class Driver implements Callable<Pair<Long, Double>> {
 		System.out.println("95 Percentile is: "+percentile95);
 		System.out.println("99 Percentile is: "+percentile99);
 		// Std err - averageTime, median, percentile95 and percentile 99
-		return new Pair<>(count, totalTime);
+		return ((double) count / (double) execTimeSec);
     }
 	
 	public void startSession() {
